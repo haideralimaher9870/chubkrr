@@ -1,0 +1,181 @@
+<!doctype html>
+
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Minecraft Java ⇄ Bedrock Converter (Browser)</title>
+  <style>
+    :root{font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,'Helvetica Neue',Arial;margin:0}
+    body{display:flex;min-height:100vh;align-items:center;justify-content:center;padding:24px;background:#0f172a;color:#e6eef8}
+    .card{width:100%;max-width:920px;background:linear-gradient(180deg,#0b1220,#071020);border-radius:12px;padding:20px;box-shadow:0 10px 30px rgba(2,6,23,.6)}
+    h1{margin:0 0 8px;font-size:20px}
+    p.lead{margin:0 0 16px;color:#9fb0d8}
+    label{display:block;margin:10px 0 6px;font-size:13px;color:#bcd0ee}
+    .row{display:flex;gap:12px;align-items:center}
+    select,input[type=file]{padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,.06);background:#071028;color:inherit}
+    button{padding:10px 12px;border-radius:8px;background:#2563eb;border:0;color:white;cursor:pointer}
+    button.secondary{background:#0b2240}
+    .muted{color:#93a7d9;font-size:13px}
+    pre{background:#071028;padding:12px;border-radius:8px;color:#a7c0ea;overflow:auto}
+    a.download{display:inline-block;margin-top:12px}
+    footer{margin-top:14px;color:#7f9ec8;font-size:13px}
+    .danger{color:#fca5a5}
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Minecraft Java ⇄ Bedrock — Browser Convert (Demo)</h1>
+    <p class="lead">This single-file site runs entirely in your browser. Drop your world ZIP or folder archive and click convert. <strong>This is a demo that packages and prepares the world for download — not a perfect world-format translator.</strong></p><label for="direction">Conversion direction</label>
+<select id="direction">
+  <option value="java2bedrock">Java → Bedrock</option>
+  <option value="bedrock2java">Bedrock → Java</option>
+</select>
+
+<label for="worldFile">Select world archive (.zip, .mcworld, .mcpack) <span class="muted">(or drag & drop)</span></label>
+<input id="worldFile" type="file" accept=".zip,.mcworld,.mcpack" />
+
+<div style="margin-top:12px" class="row">
+  <button id="convertBtn">Convert (Demo)</button>
+  <button id="sampleBtn" class="secondary">Download demo sample</button>
+  <div style="flex:1"></div>
+  <div class="muted">Files never leave your device.</div>
+</div>
+
+<div id="progress" style="margin-top:12px"></div>
+<pre id="log" style="height:220px;margin-top:12px">Ready.
+
+Notes:
+
+This demo shows client-side packaging/unpackaging with JSZip.
+
+To implement a true format conversion you would add file-level translation logic where marked in the code. </pre>
+
+<a id="downloadLink" class="download" style="display:none" href="#">Download converted world</a>
+
+  <footer>
+    <div><strong>How to use:</strong> pick your archive → choose direction → Convert. If you want a production-quality converter, I included comments showing where to drop in actual conversion code or WebAssembly modules.</div>
+    <div style="margin-top:6px" class="danger">Warning: this demo does NOT change game internals such as region formats, NBT schemas, or guaranteed playability. It's a client-side wrapper to demonstrate the flow.</div>
+  </footer>
+</div><!-- JSZip from CDN --><script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script><script>
+  // Single-file browser converter (demo)
+  const fileInput = document.getElementById('worldFile')
+  const convertBtn = document.getElementById('convertBtn')
+  const progress = document.getElementById('progress')
+  const log = document.getElementById('log')
+  const downloadLink = document.getElementById('downloadLink')
+  const directionEl = document.getElementById('direction')
+  const sampleBtn = document.getElementById('sampleBtn')
+
+  function appendLog(msg){
+    log.textContent += '\n' + msg
+    log.scrollTop = log.scrollHeight
+  }
+
+  sampleBtn.addEventListener('click', ()=>{
+    // create a tiny demo zip to let user test the flow
+    const zip = new JSZip()
+    zip.file('level.dat', 'dummy-level-data')
+    zip.file('region/r.0.0.mca', 'dummy-region')
+    zip.file('playerdata/uuid.dat', 'player')
+    zip.generateAsync({type:'blob'}).then(b=>{
+      const url = URL.createObjectURL(b)
+      const a = document.createElement('a')
+      a.href = url; a.download = 'demo-java-world.zip'
+      a.click()
+      URL.revokeObjectURL(url)
+    })
+  })
+
+  async function convertArchive(file, direction){
+    appendLog('Reading file: ' + file.name)
+    const data = await file.arrayBuffer()
+    const zip = await JSZip.loadAsync(data)
+    appendLog('Archive entries: ' + Object.keys(zip.files).length)
+
+    // Demo conversion logic:
+    // - We will copy all files, optionally rename some, and add a CONVERSION-REPORT.txt
+    // NOTE: This is a placeholder. Real conversion requires heavy file format translation.
+
+    const out = new JSZip()
+    const report = []
+
+    // Example mapping — harmless demo changes
+    for (const relPath in zip.files){
+      const entry = zip.files[relPath]
+      if (entry.dir) continue
+      appendLog('Reading ' + relPath)
+      const content = await entry.async('uint8array')
+
+      // PLACEHOLDER: perform per-file conversion here
+      // e.g. if (direction === 'java2bedrock' && relPath.endsWith('.mca')) { convertRegionMCAtoMCR(content) }
+      // For demo we simply copy file content unchanged.
+
+      // Example: if converting Java->Bedrock, add a small prefix to level.dat to indicate converted
+      let targetPath = relPath
+      if (direction === 'java2bedrock' && relPath.toLowerCase().endsWith('level.dat')){
+        report.push('Marked level.dat as converted (demo)')
+        const prefix = new TextEncoder().encode('[converted:java2bedrock]\n')
+        const merged = new Uint8Array(prefix.length + content.length)
+        merged.set(prefix,0); merged.set(content, prefix.length)
+        out.file(targetPath, merged)
+        continue
+      }
+
+      // other cases: just copy
+      out.file(targetPath, content)
+    }
+
+    report.push('Direction: ' + direction)
+    report.push('Entry count: ' + Object.keys(zip.files).length)
+    report.push('This is a demo; run a real converter module for guaranteed format translation.')
+
+    out.file('CONVERSION-REPORT.txt', report.join('\n'))
+
+    appendLog('Building output zip...')
+    const blob = await out.generateAsync({type:'blob',compression:'DEFLATE',compressionOptions:{level:6}}, (meta)=>{
+      progress.textContent = `Compressing: ${Math.round(meta.percent)}%`;
+    })
+    progress.textContent = 'Done'
+    appendLog('Output size: ' + (blob.size/1024).toFixed(1) + ' KB')
+    return blob
+  }
+
+  convertBtn.addEventListener('click', async ()=>{
+    downloadLink.style.display = 'none'
+    log.textContent = 'Starting conversion...'
+
+    const f = fileInput.files[0]
+    if (!f){ appendLog('Please choose an archive file first'); return }
+
+    try{
+      convertBtn.disabled = true
+      appendLog('Conversion direction: ' + directionEl.value)
+      const outBlob = await convertArchive(f, directionEl.value)
+      const url = URL.createObjectURL(outBlob)
+      downloadLink.href = url
+      // suggest filename
+      const base = f.name.replace(/\.zip$|\.mcworld$|\.mcpack$/i,'')
+      const name = base + (directionEl.value==='java2bedrock' ? '-bedrock.zip' : '-java.zip')
+      downloadLink.download = name
+      downloadLink.style.display = 'inline-block'
+      downloadLink.textContent = 'Download "' + name + '"'
+      appendLog('Conversion finished — click the download link.')
+    }catch(err){
+      appendLog('Error: ' + err.message)
+      console.error(err)
+    }finally{ convertBtn.disabled = false }
+  })
+
+  // Drag & drop support
+  window.addEventListener('dragover', e=>{ e.preventDefault(); e.dataTransfer.dropEffect='copy' })
+  window.addEventListener('drop', e=>{
+    e.preventDefault()
+    if (e.dataTransfer.files && e.dataTransfer.files.length) {
+      fileInput.files = e.dataTransfer.files
+      appendLog('File dropped: ' + e.dataTransfer.files[0].name)
+    }
+  })
+</script>
+</body>
+</html>
